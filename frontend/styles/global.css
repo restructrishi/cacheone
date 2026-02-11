@@ -2,6 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-gray-50 text-gray-900 antialiased;
+/* Semantic tokens: light mode (default) */
+:root,
+.light {
+  --bg-primary: #f8fafc;
+  --bg-surface: #f1f5f9;
+  --bg-elevated: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-subtle: #e2e8f0;
+  --accent-from: #6366f1;
+  --accent-to: #14b8a6;
+  --badge-success-bg: #d1fae5;
+  --badge-success-text: #047857;
+}
+
+/* Semantic tokens: dark mode (enterprise reference) */
+.dark {
+  --bg-primary: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border-subtle: #475569;
+  --accent-from: #7c3aed;
+  --accent-to: #10b981;
+  --badge-success-bg: rgba(16, 185, 129, 0.15);
+  --badge-success-text: #34d399;
+}
+
+@layer base {
+  html {
+    @apply transition-colors duration-200;
+  }
+  body {
+    @apply antialiased;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+}
+
+/* Semantic token utilities (no raw colors in components) */
+.bg-primary { background-color: var(--bg-primary); }
+.bg-surface { background-color: var(--bg-surface); }
+.bg-elevated { background-color: var(--bg-elevated); }
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.border-subtle { border-color: var(--border-subtle); }
+.bg-accent-gradient {
+  background-image: linear-gradient(to right, var(--accent-from), var(--accent-to));
+}
+.transition-theme {
+  @apply transition-colors duration-200;
+}
+.badge-success {
+  background: var(--badge-success-bg);
+  color: var(--badge-success-text);
 }

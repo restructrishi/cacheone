@@ -27,16 +27,32 @@ export const requireModuleAccess = (moduleSlug) => async (req, _res, next) => {
       return;
     }
 
-    const result = await query(
+    const orgHasModule = await query(
       `SELECT 1 FROM organization_modules om
        JOIN modules m ON m.id = om.module_id
        WHERE om.organization_id = $1 AND m.slug = $2 AND om.enabled = true`,
       [orgId, moduleSlug]
     );
-
-    if (result.rows.length === 0) {
+    if (orgHasModule.rows.length === 0) {
       next(new ForbiddenError(`Module ${moduleSlug} is not enabled for this organization`));
       return;
+    }
+
+    if (req.user.role === ROLES.MODULE_USER) {
+      const userHasAccess = await query(
+        `SELECT 1 FROM user_module_access uma
+         JOIN modules m ON m.id = uma.module_id
+         WHERE uma.user_id = $1 AND m.slug = $2`,
+        [req.user.id, moduleSlug]
+      );
+      const userRestricted = await query(
+        'SELECT 1 FROM user_module_access WHERE user_id = $1 LIMIT 1',
+        [req.user.id]
+      );
+      if (userRestricted.rows.length > 0 && userHasAccess.rows.length === 0) {
+        next(new ForbiddenError(`You do not have access to module ${moduleSlug}`));
+        return;
+      }
     }
 
     req.moduleSlug = moduleSlug;

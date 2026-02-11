@@ -15,6 +15,7 @@ router.get('/', organisationController.list);
 router.get('/:id', organisationController.getById);
 router.post('/', validateOrganisationBody, organisationController.create);
 router.put('/:id', organisationController.update);
+router.put('/:id/modules', organisationController.setModules);
 router.delete('/:id', organisationController.remove);
 
 export default router;

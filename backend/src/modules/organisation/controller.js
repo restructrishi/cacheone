@@ -52,3 +52,14 @@ export async function remove(req, res, next) {
     next(err);
   }
 }
+
+export async function setModules(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { moduleSlugs } = req.body;
+    await organisationService.setOrganisationModules(id, moduleSlugs || []);
+    res.json({ success: true, message: 'Modules updated' });
+  } catch (err) {
+    next(err);
+  }
+}

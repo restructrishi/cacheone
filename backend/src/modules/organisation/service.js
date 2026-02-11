@@ -20,3 +20,7 @@ export async function updateOrganisation(id, data) {
 export async function deleteOrganisation(id) {
   return organisationModel.remove(id);
 }
+
+export async function setOrganisationModules(id, moduleSlugs) {
+  return organisationModel.setModules(id, moduleSlugs);
+}

@@ -6,5 +6,7 @@ const router = Router();
 
 router.post('/login', authController.login);
 router.get('/me', authMiddleware, authController.me);
+router.post('/set-password', authController.setPassword);
+router.get('/invite/validate', authController.validateInvite);
 
 export default router;

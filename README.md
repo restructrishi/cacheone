@@ -14,7 +14,8 @@ Scalable modular SaaS with **Organisation** (core), **CRM**, and **HRMS**. Multi
 
 1. Create PostgreSQL DB: `createdb cacheone_saas`
 2. Run schema: `psql -d cacheone_saas -f backend/database/schema.sql`
-3. Seed demo Super Admin (optional): from `backend` run `npm run seed`
+3. Run onboarding migration (additive): `psql -d cacheone_saas -f backend/database/migrations/001_onboarding_additive.sql`
+4. Seed demo Super Admin (optional): from `backend` run `npm run seed`
 
 **Demo Super Admin credentials** (after running seed):
 
@@ -44,9 +45,18 @@ Runs at `http://localhost:5173`. Proxy to backend: `/api` → `http://localhost:
 
 ## Auth & access
 
-- **Super Admin**: Create organisations, enable/disable modules per org, no org restriction.
-- **Org Admin / Module User**: Scoped to one organisation; access only modules enabled for that org.
+- **Super Admin**: Create organisations, enable/disable modules per org, invite Org Admins, no org restriction.
+- **Org Admin**: Invite users (role ADMIN or USER), assign module access; scoped to own org.
+- **Module User**: Access only modules assigned to them (or all org modules if none assigned).
 - Middlewares: `auth` → `role` → `module-access` → `resolveOrgContext` (for CRM/HRMS).
+
+## Enterprise onboarding (additive)
+
+- **Organization creation** (Super Admin): `name`, `slug`, optional `domain`, `subscription_plan`; multi-select modules via `PUT /organisations/:id/modules` body `{ moduleSlugs }`.
+- **Invites**: Super Admin invites Org Admin (email + organizationId). Org Admin invites User (email, role ADMIN/USER, module slugs for USER). No password set; status `invited`.
+- **Set password**: Invite link opens `/set-password?token=...`. `POST /api/auth/set-password` with `{ token, password }` activates the user.
+- **APIs**: `POST /api/invites`, `GET /api/invites?organizationId=`, `GET /api/modules`, `GET /api/auth/invite/validate?token=`.
+- Existing login and users are unchanged; invited users cannot login until they set a password.
 
 ## Employee Management App
 

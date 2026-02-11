@@ -14,8 +14,49 @@ import {
   getOrganisations as getOrganisationsApi,
   createOrganisation,
 } from '@/apps/organisation/services/organisationService';
+import { createInvite } from '@/shared/services/inviteService';
 import { MODULE_LABELS } from '@/shared/constants/modules';
 import { ROLES } from '@/shared/constants/roles';
+import { Button } from '@/shared/components/ui/Button';
+import { Input } from '@/shared/components/ui/Input';
+import { Card } from '@/shared/components/ui/Card';
+import { Badge } from '@/shared/components/ui/Badge';
+import { UserPlus } from 'lucide-react';
+import { InviteUserDrawer } from '@/components/invite/InviteUserDrawer';
+
+function OrgAdminDashboard({ user }) {
+  const [showInviteUser, setShowInviteUser] = useState(false);
+  const [orgName, setOrgName] = useState('Your organization');
+  useEffect(() => {
+    if (user?.org_id) {
+      getOrganisationsApi(true).then((list) => {
+        const o = list?.find((x) => x.id === user.org_id);
+        if (o?.name) setOrgName(o.name);
+      }).catch(() => {});
+    }
+  }, [user?.org_id]);
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold text-primary">Dashboard</h1>
+        <Button variant="primary" onClick={() => setShowInviteUser(true)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Invite User
+        </Button>
+      </div>
+      <Card>
+        <p className="text-primary">Invite team members and assign them roles and module access.</p>
+        <p className="mt-2 text-sm text-secondary">Use the button above to send an invite link.</p>
+      </Card>
+      <InviteUserDrawer
+        open={showInviteUser}
+        onClose={() => setShowInviteUser(false)}
+        organizationId={user?.org_id}
+        organisationName={orgName}
+      />
+    </div>
+  );
+}
 
 export function SuperAdminDashboard() {
   const { user } = useAuth();
@@ -27,6 +68,12 @@ export function SuperAdminDashboard() {
   const [createSlug, setCreateSlug] = useState('');
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [showInviteOrgAdmin, setShowInviteOrgAdmin] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteOrgId, setInviteOrgId] = useState('');
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState(null);
 
   const isSuperAdmin = user?.role === ROLES.SUPER_ADMIN;
 
@@ -81,155 +128,214 @@ export function SuperAdminDashboard() {
     }
   }
 
+  async function handleInviteOrgAdmin(e) {
+    e.preventDefault();
+    setInviteError('');
+    setInviteSuccess(null);
+    if (!inviteEmail.trim()) {
+      setInviteError('Email is required');
+      return;
+    }
+    if (!inviteOrgId) {
+      setInviteError('Organization is required');
+      return;
+    }
+    setInviteSubmitting(true);
+    try {
+      const data = await createInvite({ email: inviteEmail.trim(), organizationId: inviteOrgId });
+      setInviteSuccess(data.inviteLink || 'Invite sent. They can set their password via the email link.');
+      setInviteEmail('');
+      setInviteOrgId('');
+    } catch (err) {
+      setInviteError(err.message || 'Failed to send invite');
+    } finally {
+      setInviteSubmitting(false);
+    }
+  }
+
   if (!isSuperAdmin) {
+    if (user?.role === ROLES.ORG_ADMIN) {
+      return (
+        <OrgAdminDashboard user={user} />
+      );
+    }
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6">
-        <p className="text-slate-600">You don’t have access to the Super Admin panel.</p>
-        <p className="mt-2 text-sm text-slate-500">Select a module from the navigation.</p>
-      </div>
+      <Card>
+        <p className="text-primary">You do not’t have access to the Super Admin panel.</p>
+        <p className="mt-2 text-sm text-secondary">Select a module from the navigation.</p>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Super Admin</h1>
-        <button
-          type="button"
-          onClick={() => setShowCreate((v) => !v)}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-500"
-        >
-          <Plus className="h-4 w-4" />
-          Create Organization
-        </button>
+        <h1 className="text-2xl font-bold text-primary">Super Admin</h1>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => { setShowInviteOrgAdmin(true); setInviteSuccess(null); setInviteError(''); }}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Invite Org Admin
+          </Button>
+          <Button variant="primary" onClick={() => setShowCreate((v) => !v)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Organization
+          </Button>
+        </div>
       </div>
 
-      {showCreate && (
-        <section className="rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-semibold text-slate-900">Create Organization</h2>
-          <form onSubmit={handleCreateOrg} className="mt-4 max-w-md space-y-4">
-            {createError && (
-              <p className="text-sm text-red-600">{createError}</p>
-            )}
+      {showInviteOrgAdmin && (
+        <Card>
+          <h2 className="text-lg font-semibold text-primary">Invite Org Admin</h2>
+          <p className="mt-1 text-sm text-secondary">They will receive an email to set their password.</p>
+          <form onSubmit={handleInviteOrgAdmin} className="mt-4 max-w-md space-y-4">
+            {inviteError && <p className="text-sm text-red-500">{inviteError}</p>}
+            {inviteSuccess && <p className="text-sm text-[var(--accent-to)]">{inviteSuccess}</p>}
+            <Input
+              label="Email"
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="admin@organisation.com"
+              required
+            />
             <div>
-              <label className="block text-sm font-medium text-slate-700">Name *</label>
-              <input
-                type="text"
-                value={createName}
-                onChange={(e) => {
-                  setCreateName(e.target.value);
-                  if (!createSlug) setCreateSlug(slugFromName(e.target.value));
-                }}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                placeholder="Acme Inc"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Slug</label>
-              <input
-                type="text"
-                value={createSlug}
-                onChange={(e) => setCreateSlug(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                placeholder="acme-inc"
-              />
+              <label className="mb-1.5 block text-sm font-medium text-primary">Organization</label>
+              <select
+                value={inviteOrgId}
+                onChange={(e) => setInviteOrgId(e.target.value)}
+                className="w-full rounded-lg border border-subtle bg-elevated px-3 py-2.5 text-primary"
+                required
+              >
+                <option value="">Select organization</option>
+                {organisations.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
             </div>
             <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={createSubmitting}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-              >
+              <Button type="submit" variant="gradient" disabled={inviteSubmitting}>
+                {inviteSubmitting ? 'Sending…' : 'Send invite'}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => { setShowInviteOrgAdmin(false); setInviteError(''); setInviteSuccess(null); }}>
+                Close
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      {showCreate && (
+        <Card>
+          <h2 className="text-lg font-semibold text-primary">Create Organization</h2>
+          <form onSubmit={handleCreateOrg} className="mt-4 max-w-md space-y-4">
+            {createError && <p className="text-sm text-red-500">{createError}</p>}
+            <Input
+              label="Name *"
+              value={createName}
+              onChange={(e) => {
+                setCreateName(e.target.value);
+                if (!createSlug) setCreateSlug(slugFromName(e.target.value));
+              }}
+              placeholder="Acme Inc"
+            />
+            <Input
+              label="Slug"
+              value={createSlug}
+              onChange={(e) => setCreateSlug(e.target.value)}
+              placeholder="acme-inc"
+            />
+            <div className="flex gap-2">
+              <Button type="submit" variant="gradient" disabled={createSubmitting}>
                 {createSubmitting ? 'Creating…' : 'Create'}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => {
                   setShowCreate(false);
                   setCreateError('');
                   setCreateName('');
                   setCreateSlug('');
                 }}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
-        </section>
+        </Card>
       )}
 
       {/* System Status */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-          <Activity className="h-5 w-5 text-emerald-500" />
+      <Card>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-primary">
+          <Activity className="h-5 w-5 text-[var(--accent-to)]" />
           System Status
         </h2>
         <div className="mt-4 flex flex-wrap gap-4">
-          <div className="rounded-lg bg-slate-50 px-4 py-3">
-            <span className="text-2xl font-bold text-slate-900">{organisations.length}</span>
-            <span className="ml-2 text-slate-600">Organizations</span>
+          <div className="rounded-lg bg-surface px-4 py-3">
+            <span className="text-2xl font-bold text-primary">{organisations.length}</span>
+            <span className="ml-2 text-secondary">Organizations</span>
           </div>
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <Badge variant="success" className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-current" />
             Operational
-          </div>
+          </Badge>
         </div>
-      </section>
+      </Card>
 
       {/* Module Overview */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-          <Layers className="h-5 w-5 text-slate-600" />
+      <Card>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-primary">
+          <Layers className="h-5 w-5 text-secondary" />
           Module Overview
         </h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <div className="flex items-center gap-4 rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+          <div className="flex items-center gap-4 rounded-lg border border-subtle bg-surface p-4 transition-theme">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-gradient text-white">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-medium text-slate-900">{MODULE_LABELS.organisation}</p>
-              <p className="text-xs text-slate-500">Core • Always enabled</p>
+              <p className="font-medium text-primary">{MODULE_LABELS.organisation}</p>
+              <p className="text-xs text-secondary">Core • Always enabled</p>
             </div>
           </div>
-          <div className="flex items-center gap-4 rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+          <div className="flex items-center gap-4 rounded-lg border border-subtle bg-surface p-4 transition-theme">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-gradient text-white">
               <BarChart3 className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-medium text-slate-900">{MODULE_LABELS.crm}</p>
-              <p className="text-xs text-slate-500">Default • Locked on create</p>
+              <p className="font-medium text-primary">{MODULE_LABELS.crm}</p>
+              <p className="text-xs text-secondary">Default • Locked on create</p>
             </div>
           </div>
-          <div className="flex items-center gap-4 rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+          <div className="flex items-center gap-4 rounded-lg border border-subtle bg-surface p-4 transition-theme">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-gradient text-white">
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-medium text-slate-900">{MODULE_LABELS.hrms}</p>
-              <p className="text-xs text-slate-500">Optional • Toggle per org</p>
+              <p className="font-medium text-primary">{MODULE_LABELS.hrms}</p>
+              <p className="text-xs text-secondary">Optional • Toggle per org</p>
             </div>
           </div>
         </div>
-      </section>
+      </Card>
 
       {/* Organizations List */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Organizations</h2>
+      <Card>
+        <h2 className="text-lg font-semibold text-primary">Organizations</h2>
         {loading ? (
           <div className="mt-6 flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+            <Loader2 className="h-8 w-8 animate-spin text-secondary" />
           </div>
         ) : error ? (
-          <p className="mt-4 text-red-600">{error}</p>
+          <p className="mt-4 text-red-500">{error}</p>
         ) : organisations.length === 0 ? (
-          <p className="mt-6 text-slate-500">No organizations yet. Create one to get started.</p>
+          <p className="mt-6 text-secondary">No organizations yet. Create one to get started.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[500px] text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-600">
+                <tr className="border-b border-subtle text-secondary">
                   <th className="pb-3 font-medium">Name</th>
                   <th className="pb-3 font-medium">Slug</th>
                   <th className="pb-3 font-medium">Active Modules</th>
@@ -239,25 +345,22 @@ export function SuperAdminDashboard() {
               </thead>
               <tbody>
                 {organisations.map((org) => (
-                  <tr key={org.id} className="border-b border-slate-100">
-                    <td className="py-3 font-medium text-slate-900">{org.name}</td>
-                    <td className="py-3 text-slate-600">{org.slug}</td>
+                  <tr key={org.id} className="border-b border-subtle transition-theme">
+                    <td className="py-3 font-medium text-primary">{org.name}</td>
+                    <td className="py-3 text-secondary">{org.slug}</td>
                     <td className="py-3">
                       <span className="flex flex-wrap gap-1">
                         {(org.enabled_modules || []).map((slug) => (
-                          <span
-                            key={slug}
-                            className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
-                          >
+                          <Badge key={slug} variant="muted">
                             {MODULE_LABELS[slug] ?? slug}
-                          </span>
+                          </Badge>
                         ))}
                         {(org.enabled_modules || []).length === 0 && (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-secondary">—</span>
                         )}
                       </span>
                     </td>
-                    <td className="py-3 text-slate-500">
+                    <td className="py-3 text-secondary">
                       {org.created_at
                         ? new Date(org.created_at).toLocaleDateString()
                         : '—'}
@@ -265,7 +368,7 @@ export function SuperAdminDashboard() {
                     <td className="py-3">
                       <Link
                         to={`/dashboard/organisation/${org.id}`}
-                        className="text-blue-600 hover:underline"
+                        className="font-medium text-primary hover:underline"
                       >
                         Manage
                       </Link>
@@ -276,7 +379,7 @@ export function SuperAdminDashboard() {
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </div>
   );
 }
