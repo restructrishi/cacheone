@@ -25,12 +25,40 @@ const password = process.env.SEED_PASSWORD || 'admin123';
 
 async function run() {
   const hash = await bcrypt.hash(password, 10);
-  await pool.query(
-    `INSERT INTO users (email, password_hash, role, organization_id)
-     VALUES ($1, $2, 'super_admin', NULL)
-     ON CONFLICT (email) DO UPDATE SET password_hash = $2, role = 'super_admin'`,
-    [email, hash]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO users (email, password, password_hash, role, organization_id, status)
+       VALUES ($1, $2, $2, 'super_admin', NULL, 'active')
+       ON CONFLICT (email) DO UPDATE SET
+         password = EXCLUDED.password,
+         password_hash = EXCLUDED.password_hash,
+         role = 'super_admin',
+         status = COALESCE(users.status, 'active')`,
+      [email, hash]
+    );
+  } catch (err) {
+    if (err.code === '42703') {
+      if (err.message?.includes('password_hash')) {
+        await pool.query(
+          `INSERT INTO users (email, password, role, organization_id)
+           VALUES ($1, $2, 'super_admin', NULL)
+           ON CONFLICT (email) DO UPDATE SET password = $2, role = 'super_admin'`,
+          [email, hash]
+        );
+      } else if (err.message?.includes('status')) {
+        await pool.query(
+          `INSERT INTO users (email, password, password_hash, role, organization_id)
+           VALUES ($1, $2, $2, 'super_admin', NULL)
+           ON CONFLICT (email) DO UPDATE SET password = $2, password_hash = $2, role = 'super_admin'`,
+          [email, hash]
+        );
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
   console.log('Super Admin user created:', email);
   process.exit(0);
 }

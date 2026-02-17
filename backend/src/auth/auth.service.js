@@ -30,35 +30,59 @@ export function createToken(payload) {
 /**
  * Authenticate user by email/password. Returns user + token.
  * Rejects invited users (must set password via invite link first).
+ * Password read: prefers password_hash, fallback to legacy password column for backward compatibility.
+ * Supports both schemas: table with both columns, or legacy table with only password.
  */
 export async function login(email, password) {
-  const result = await query(
-    'SELECT id, email, password_hash, role, organization_id, status FROM users WHERE email = $1',
-    [email]
-  );
-  const user = result.rows[0];
+  let user;
+  try {
+    const result = await query(
+      `SELECT id, email, password, password_hash, role, organization_id, status
+       FROM users
+       WHERE email = $1`,
+      [email]
+    );
+    user = result.rows[0];
+  } catch (err) {
+    if (err.code === '42703' && err.message?.includes('password_hash')) {
+      const result = await query(
+        `SELECT id, email, password, role, organization_id
+         FROM users
+         WHERE email = $1`,
+        [email]
+      );
+      const row = result.rows[0];
+      user = row ? { ...row, password_hash: null, status: row.status ?? 'active' } : null;
+    } else {
+      throw err;
+    }
+  }
   if (!user) throw new UnauthorizedError('Invalid credentials');
 
   if (user.status === 'invited') {
     throw new UnauthorizedError('Please set your password using the invite link sent to your email.');
   }
 
-  if (!user.password_hash) throw new UnauthorizedError('Invalid credentials');
-  const valid = await comparePassword(password, user.password_hash);
-  if (!valid) throw new UnauthorizedError('Invalid credentials');
-
-  const tokenPayload = {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    ...(user.organization_id && { org_id: user.organization_id }),
-  };
-  const accessToken = createToken(tokenPayload);
   const enabled_modules = await getEnabledModulesForUser(
     user.id,
     user.organization_id ?? null,
     user.role
   );
+  const storedHash = user.password_hash ?? user.password;
+  if (!storedHash) throw new UnauthorizedError('Invalid credentials');
+  const valid = await comparePassword(password, storedHash);
+  if (!valid) throw new UnauthorizedError('Invalid credentials');
+
+  const tokenPayload = {
+    userId: user.id,
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    orgId: user.organization_id ?? null,
+    ...(user.organization_id && { org_id: user.organization_id }),
+    assignedModules: enabled_modules,
+  };
+  const accessToken = createToken(tokenPayload);
   return {
     user: {
       id: user.id,
@@ -75,29 +99,36 @@ export async function login(email, password) {
  * Get enabled module slugs for a user (for sidebar/API). Super Admin gets all; Org Admin gets org modules; User gets user_module_access or org modules.
  */
 export async function getEnabledModulesForUser(userId, orgId, role) {
-  if (role === 'super_admin') {
-    const r = await query('SELECT slug FROM modules ORDER BY slug');
-    return r.rows.map((row) => row.slug);
+  try {
+    if (role === 'super_admin') {
+      const r = await query('SELECT slug FROM modules ORDER BY slug');
+      return r.rows.map((row) => row.slug);
+    }
+    if (!orgId) return [];
+    const orgModules = await query(
+      `SELECT m.slug FROM organization_modules om
+       JOIN modules m ON m.id = om.module_id
+       WHERE om.organization_id = $1 AND om.enabled = true`,
+      [orgId]
+    );
+    const orgSlugs = orgModules.rows.map((r) => r.slug);
+    if (role === 'org_admin') return orgSlugs;
+    const userModules = await query(
+      `SELECT m.slug FROM user_module_access uma
+       JOIN modules m ON m.id = uma.module_id
+       WHERE uma.user_id = $1`,
+      [userId]
+    );
+    if (userModules.rows.length > 0) {
+      return userModules.rows.map((r) => r.slug).filter((s) => orgSlugs.includes(s));
+    }
+    return orgSlugs;
+  } catch (err) {
+    if (err.code === '42P01') {
+      return [];
+    }
+    throw err;
   }
-  if (!orgId) return [];
-  const orgModules = await query(
-    `SELECT m.slug FROM organization_modules om
-     JOIN modules m ON m.id = om.module_id
-     WHERE om.organization_id = $1 AND om.enabled = true`,
-    [orgId]
-  );
-  const orgSlugs = orgModules.rows.map((r) => r.slug);
-  if (role === 'org_admin') return orgSlugs;
-  const userModules = await query(
-    `SELECT m.slug FROM user_module_access uma
-     JOIN modules m ON m.id = uma.module_id
-     WHERE uma.user_id = $1`,
-    [userId]
-  );
-  if (userModules.rows.length > 0) {
-    return userModules.rows.map((r) => r.slug).filter((s) => orgSlugs.includes(s));
-  }
-  return orgSlugs;
 }
 
 /**

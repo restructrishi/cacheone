@@ -1,12 +1,33 @@
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
 import { MODULES, MODULE_LABELS } from '@/shared/constants/modules';
+import { api } from '@/shared/utils/api';
 
 export function AppLayout() {
-  const { user, isAuthenticated } = useAuth();
-  const enabledModules = user?.enabled_modules ?? [MODULES.ORGANISATION, MODULES.CRM, MODULES.HRMS];
+  const { user, token, isAuthenticated } = useAuth();
+  const [enabledModules, setEnabledModules] = useState(
+    user?.enabled_modules ?? [MODULES.ORGANISATION, MODULES.CRM, MODULES.HRMS]
+  );
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api('/org/modules');
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setEnabledModules(data);
+        }
+      } catch {
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   return (
     <div className="min-h-screen flex flex-col bg-primary transition-theme">

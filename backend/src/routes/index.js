@@ -5,6 +5,7 @@ import crmRoutes from '../modules/crm/index.js';
 import hrmsRoutes from '../modules/hrms/index.js';
 import inviteRoutes from '../modules/invites/index.js';
 import moduleListRoutes from '../modules/module-list/routes.js';
+import orgRoutes from './org.js';
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use('/invites', inviteRoutes);
 router.use('/modules', moduleListRoutes);
 router.use('/crm', crmRoutes);
 router.use('/hrms', hrmsRoutes);
+router.use('/org', orgRoutes);
 
 export { router as routes };
